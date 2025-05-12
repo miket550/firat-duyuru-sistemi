@@ -56,19 +56,29 @@ def check_announcements():
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Duyuruları bul (HTML yapısına göre güncellendi)
-            announcements = soup.find_all("div", class_="news-item")  # Fırat Üniversitesi sitelerine göre sınıf adı değiştirildi
+            # Duyuruları bul (daha genel bir yapı kullanıyoruz)
+            # Fırat Üniversitesi sitelerinde genellikle "list-item" veya benzeri bir sınıf olabilir
+            announcements = soup.find_all("div", class_=["list-item", "announcement", "news-item", "card"])
 
             if not announcements:
-                print(f"No announcements found on {site['url']}")
+                print(f"No announcements found on {site['url']}. HTML structure may have changed.")
+                continue
 
             for ann in announcements:
-                title_tag = ann.find("h3") or ann.find("h2")
+                # Başlık için h3, h4 veya h2 etiketlerini kontrol et
+                title_tag = ann.find(["h3", "h4", "h2"])
                 title = title_tag.text.strip() if title_tag else "Başlık Bulunamadı"
-                date_tag = ann.find("span", class_="date") or ann.find("div", class_="date")
+
+                # Tarih için span veya div içinde date sınıfını kontrol et
+                date_tag = ann.find(["span", "div"], class_=["date", "post-date", "meta-date"])
                 date = date_tag.text.strip() if date_tag else "Tarih Bulunamadı"
+
+                # Link için a etiketini kontrol et
                 link_tag = ann.find("a")
-                link = link_tag["href"] if link_tag else site["url"]
+                link = link_tag["href"] if link_tag and "href" in link_tag.attrs else site["url"]
+                # Eğer link relatif bir URL ise tam URL'ye çevir
+                if link.startswith("/"):
+                    link = site["url"].rstrip("/") + link
 
                 print(f"Found announcement: {title} on {date} - {link}")
 
@@ -84,15 +94,18 @@ def check_announcements():
         except Exception as e:
             print(f"Error scraping {site['url']}: {e}")
 
-    for ann in new_announcements:
-        message = (
-            f"{ann['unit']} Yeni Duyuru Paylaşıldı\n"
-            f"Başlık: {ann['title']}\n"
-            f"Tarih: {ann['date']}\n"
-            f"Duyuruya ulaşmak için: {ann['link']}"
-        )
-        print(f"Sending message to Telegram: {message}")
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    if new_announcements:
+        for ann in new_announcements:
+            message = (
+                f"{ann['unit']} Yeni Duyuru Paylaşıldı\n"
+                f"Başlık: {ann['title']}\n"
+                f"Tarih: {ann['date']}\n"
+                f"Duyuruya ulaşmak için: {ann['link']}"
+            )
+            print(f"Sending message to Telegram: {message}")
+            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    else:
+        print("No new announcements found.")
 
     write_seen_announcements(seen_announcements)
 
