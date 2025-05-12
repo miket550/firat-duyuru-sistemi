@@ -1,13 +1,17 @@
+from flask import Flask
 import requests
 from bs4 import BeautifulSoup
 import telegram
 import json
-import time
 import os
+import threading
+import time
 
-# Telegram Bot Token ve Chat ID (Bunları sen dolduracaksın)
-TELEGRAM_TOKEN = "7673163419:AAGEl0zOpSF93LpZj3d_Kr3o_1KKbHvI8Fs"  # Buraya Telegram API token'ını yaz
-TELEGRAM_CHAT_ID = "944442637"  # Buraya Telegram Chat ID'ni yaz
+app = Flask(__name__)
+
+# Telegram Bot Token ve Chat ID
+TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"  # Buraya Telegram API token'ını yaz
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Buraya Telegram Chat ID'ni yaz
 
 # Duyuru siteleri ve birim adları
 SITES = [
@@ -22,7 +26,6 @@ SITES = [
     {"url": "https://kutuphanedb.firat.edu.tr/announcements-all", "unit": "F.Ü Kütüphane Daire Başkanlığı"},
 ]
 
-# Önceki duyuruları saklamak için bir JSON dosyası
 def read_seen_announcements():
     try:
         if os.path.exists("seen_announcements.json"):
@@ -40,7 +43,6 @@ def write_seen_announcements(seen):
     except Exception as e:
         print(f"Error writing seen announcements: {e}")
 
-# Duyuruları tarama fonksiyonu
 def check_announcements():
     seen_announcements = read_seen_announcements()
     new_announcements = []
@@ -49,19 +51,18 @@ def check_announcements():
 
     for site in SITES:
         try:
-            response = requests.get(site["url"], timeout=10)
+            # SSL doğrulamasını devre dışı bırak
+            response = requests.get(site["url"], timeout=10, verify=False)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Duyuruları bul (sitelerin yapısına göre özelleştirildi)
-            announcements = soup.find_all("div", class_="announcement-item")  # Örnek class, sitelere göre değişecek
+            announcements = soup.find_all("div", class_="announcement-item")
 
             for ann in announcements:
                 title = ann.find("h2").text.strip() if ann.find("h2") else "Başlık Bulunamadı"
                 date = ann.find("span", class_="date").text.strip() if ann.find("span", class_="date") else "Tarih Bulunamadı"
                 link = ann.find("a")["href"] if ann.find("a") else site["url"]
 
-                # Eğer duyuru daha önce görülmediyse
                 if title not in seen_announcements:
                     seen_announcements.append(title)
                     new_announcements.append({
@@ -74,7 +75,6 @@ def check_announcements():
         except Exception as e:
             print(f"Error scraping {site['url']}: {e}")
 
-    # Yeni duyuruları Telegram'a gönder
     for ann in new_announcements:
         message = (
             f"{ann['unit']} Yeni Duyuru Paylaşıldı\n"
@@ -84,11 +84,20 @@ def check_announcements():
         )
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
-    # Görülen duyuruları güncelle
     write_seen_announcements(seen_announcements)
 
-if __name__ == "__main__":
+def run_background_task():
     while True:
         print("Checking announcements...")
         check_announcements()
-        time.sleep(60)  # 1 dakikada bir kontrol et
+        time.sleep(60)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+if __name__ == "__main__":
+    # SSL doğrulama uyarılarını devre dışı bırak
+    requests.packages.urllib3.disable_warnings()
+    threading.Thread(target=run_background_task, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
