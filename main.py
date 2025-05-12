@@ -10,8 +10,8 @@ import time
 app = Flask(__name__)
 
 # Telegram Bot Token ve Chat ID
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"  # Buraya Telegram API token'ını yaz
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Buraya Telegram Chat ID'ni yaz
+TELEGRAM_TOKEN = "7673163419:AAGEl0zOpSF93LpZj3d_Kr3o_1KKbHvI8Fs"
+TELEGRAM_CHAT_ID = "944442637"
 
 # Duyuru siteleri ve birim adları
 SITES = [
