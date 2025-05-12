@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 import telegram
 import json
 import os
-import threading
 import time
 
 app = Flask(__name__)
@@ -54,19 +53,19 @@ def check_announcements():
             print(f"Scraping site: {site['url']}")
             response = requests.get(site["url"], timeout=10, verify=False)
             response.raise_for_status()
+            print(f"Successfully fetched {site['url']}")
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Duyuruları bul (daha genel bir yapı kullanıyoruz)
-            # Fırat Üniversitesi sitelerinde genellikle "list-item" veya benzeri bir sınıf olabilir
-            announcements = soup.find_all("div", class_=["list-item", "announcement", "news-item", "card"])
+            # Duyuruları bulmaya çalış
+            announcements = soup.find_all("div", class_=["list-item", "announcement", "news-item", "card", "post"])
 
             if not announcements:
                 print(f"No announcements found on {site['url']}. HTML structure may have changed.")
                 continue
 
             for ann in announcements:
-                # Başlık için h3, h4 veya h2 etiketlerini kontrol et
-                title_tag = ann.find(["h3", "h4", "h2"])
+                # Başlık için h3, h4, h2 veya a etiketlerini kontrol et
+                title_tag = ann.find(["h3", "h4", "h2", "a"])
                 title = title_tag.text.strip() if title_tag else "Başlık Bulunamadı"
 
                 # Tarih için span veya div içinde date sınıfını kontrol et
@@ -76,7 +75,6 @@ def check_announcements():
                 # Link için a etiketini kontrol et
                 link_tag = ann.find("a")
                 link = link_tag["href"] if link_tag and "href" in link_tag.attrs else site["url"]
-                # Eğer link relatif bir URL ise tam URL'ye çevir
                 if link.startswith("/"):
                     link = site["url"].rstrip("/") + link
 
@@ -103,23 +101,25 @@ def check_announcements():
                 f"Duyuruya ulaşmak için: {ann['link']}"
             )
             print(f"Sending message to Telegram: {message}")
-            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+            try:
+                bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                print("Message sent successfully.")
+            except Exception as e:
+                print(f"Error sending message to Telegram: {e}")
     else:
         print("No new announcements found.")
 
     write_seen_announcements(seen_announcements)
-
-def run_background_task():
-    while True:
-        print("Checking announcements...")
-        check_announcements()
-        time.sleep(60)
+    return new_announcements
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    print("Received request to / endpoint")
+    new_announcements = check_announcements()
+    if new_announcements:
+        return f"Bot is running! Found {len(new_announcements)} new announcements."
+    return "Bot is running! No new announcements found."
 
 if __name__ == "__main__":
     requests.packages.urllib3.disable_warnings()
-    threading.Thread(target=run_background_task, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
