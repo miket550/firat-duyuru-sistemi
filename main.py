@@ -51,17 +51,26 @@ def check_announcements():
 
     for site in SITES:
         try:
-            # SSL doğrulamasını devre dışı bırak
+            print(f"Scraping site: {site['url']}")
             response = requests.get(site["url"], timeout=10, verify=False)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
 
-            announcements = soup.find_all("div", class_="announcement-item")
+            # Duyuruları bul (HTML yapısına göre güncellendi)
+            announcements = soup.find_all("div", class_="news-item")  # Fırat Üniversitesi sitelerine göre sınıf adı değiştirildi
+
+            if not announcements:
+                print(f"No announcements found on {site['url']}")
 
             for ann in announcements:
-                title = ann.find("h2").text.strip() if ann.find("h2") else "Başlık Bulunamadı"
-                date = ann.find("span", class_="date").text.strip() if ann.find("span", class_="date") else "Tarih Bulunamadı"
-                link = ann.find("a")["href"] if ann.find("a") else site["url"]
+                title_tag = ann.find("h3") or ann.find("h2")
+                title = title_tag.text.strip() if title_tag else "Başlık Bulunamadı"
+                date_tag = ann.find("span", class_="date") or ann.find("div", class_="date")
+                date = date_tag.text.strip() if date_tag else "Tarih Bulunamadı"
+                link_tag = ann.find("a")
+                link = link_tag["href"] if link_tag else site["url"]
+
+                print(f"Found announcement: {title} on {date} - {link}")
 
                 if title not in seen_announcements:
                     seen_announcements.append(title)
@@ -82,6 +91,7 @@ def check_announcements():
             f"Tarih: {ann['date']}\n"
             f"Duyuruya ulaşmak için: {ann['link']}"
         )
+        print(f"Sending message to Telegram: {message}")
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
     write_seen_announcements(seen_announcements)
@@ -97,7 +107,6 @@ def home():
     return "Bot is running!"
 
 if __name__ == "__main__":
-    # SSL doğrulama uyarılarını devre dışı bırak
     requests.packages.urllib3.disable_warnings()
     threading.Thread(target=run_background_task, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
